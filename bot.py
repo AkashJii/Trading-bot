@@ -17,7 +17,7 @@ def index():
 # Live BTC price nikalne ka function
 def get_btc_price():
     try:
-        url = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+        url = "https://api.binance.us/api/v3/ticker/price?symbol=BTCUSDT"
         response = requests.get(url)
         data = response.json()
         return float(data['price'])
@@ -27,7 +27,7 @@ def get_btc_price():
 # Start Message
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "Ram Ram ji'Akash set and forget bot' zinda ho gaya hai! 🎯 /setup dabao aur naya order dekho.")
+    bot.reply_to(message, "Ram Ram ji 'Akash set and forget bot' zinda ho gaya hai! 🎯 /setup dabao aur naya order dekho.")
 
 # Asli Magic: Set and Forget Logic
 @bot.message_handler(commands=['setup'])
