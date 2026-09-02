@@ -11,33 +11,33 @@ app = Flask(__name__)
 
 @app.route('/')
 def index():
-    return "Akash Trend-Following Sniper Bot 24/7 Active Hai!"
+    return "Akash Public Trend Sniper Bot 24/7 Active Hai!"
 
 def analyze_trend_and_setup():
     try:
         url = "https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=250"
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         data = response.json()
         
+        if not isinstance(data, list):
+            return None, None, "API Error", None, None, None
+
         df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'qav', 'num_trades', 'taker_base_vol', 'taker_quote_vol', 'ignore'])
         df['close'] = df['close'].astype(float)
         
         current_price = df['close'].iloc[-1]
         ema_200 = df['close'].ewm(span=200, adjust=False).mean().iloc[-1]
         
-        # Trend Detection: Price EMA ke upar hai ya neeche?
         if current_price > ema_200:
             trend = "BULLISH"
-            # LONG SETUP: Dip par buy karenge
-            entry_price = round(current_price - 100)
-            sl_price = entry_price - 500
-            tp_price = entry_price + 1000
+            entry_price = round(current_price - 100, 2)
+            sl_price = round(entry_price - 500, 2)
+            tp_price = round(entry_price + 1000, 2)
         else:
             trend = "BEARISH"
-            # SHORT SETUP: Thoda bounce aane par sell karenge
-            entry_price = round(current_price + 100)
-            sl_price = entry_price + 500
-            tp_price = entry_price - 1000
+            entry_price = round(current_price + 100, 2)
+            sl_price = round(entry_price + 500, 2)
+            tp_price = round(entry_price - 1000, 2)
             
         return current_price, ema_200, trend, entry_price, sl_price, tp_price
     except Exception as e:
@@ -45,21 +45,22 @@ def analyze_trend_and_setup():
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "Bhai, 'Akash Trend-Following Bot' active ho gaya hai! 🎯 /setup dabao.")
+    user_name = message.from_user.first_name or "Trader"
+    bot.reply_to(message, f"Ram Ram {user_name} ji! 🎯 Main 'Akash Trend Sniper Bot' hoon. /setup dabakar live crypto setup nikal sakte ho.")
 
 @bot.message_handler(commands=['setup'])
 def send_setup(message):
-    bot.reply_to(message, "Market trend scan ho raha hai, Long ya Short decide kar raha hoon... ⏳")
+    bot.reply_to(message, "Market scan ho raha hai, thoda wait karo... ⏳")
     
     current_price, ema_200, trend, entry, sl, tp = analyze_trend_and_setup()
     
     if current_price and isinstance(ema_200, float):
         if trend == "BULLISH":
             signal_title = "🟢 **LONG (BUY) SETUP -- UPTREND**"
-            strategy_msg = "Market 200 EMA ke upar hai, trend bullish hai. Dip buy setup ready hai!"
+            strategy_msg = "Market 200 EMA ke upar hai, trend bullish hai."
         else:
             signal_title = "🔴 **SHORT (SELL) SETUP -- DOWNTREND**"
-            strategy_msg = "Market 200 EMA ke neeche hai, trend bearish hai. Bounce sell setup ready hai!"
+            strategy_msg = "Market 200 EMA ke neeche hai, trend bearish hai."
 
         reply_text = f"""{signal_title}
         
@@ -73,11 +74,11 @@ def send_setup(message):
 💰 **Take Profit (TP):** ${tp:,.2f}
 
 ⚖️ **Risk/Reward:** 1:2
-Trend is your friend! Delta mein feed karo. 🚀"""
+Powered by Akash System 🚀"""
         
         bot.reply_to(message, reply_text)
     else:
-        bot.reply_to(message, f"Bhai, error aa gaya: {trend}")
+        bot.reply_to(message, "Bhai, market data fetch karne mein chota sa glitch aaya. Dobara /setup bhejo!")
 
 def run_bot():
     bot.infinity_polling()
