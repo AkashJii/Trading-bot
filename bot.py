@@ -3,59 +3,81 @@ from flask import Flask
 import threading
 import os
 import requests
+import pandas as pd
 
-# Tumhara token
 TOKEN = '8665827387:AAEDbbZSPvJ_z6wGJHCN7CvuBYoGsi3Fv9A'
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-# Render ko zinda rakhne ke liye
 @app.route('/')
 def index():
-    return "Akash set and forget bot 24/7 Zinda Hai!"
+    return "Akash Trend-Following Sniper Bot 24/7 Active Hai!"
 
-# Live BTC price nikalne ka function
-def get_btc_price():
+def analyze_trend_and_setup():
     try:
-        url = "https://api.binance.us/api/v3/ticker/price?symbol=BTCUSDT"
+        url = "https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=250"
         response = requests.get(url)
         data = response.json()
-        return float(data['price'])
+        
+        df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'qav', 'num_trades', 'taker_base_vol', 'taker_quote_vol', 'ignore'])
+        df['close'] = df['close'].astype(float)
+        
+        current_price = df['close'].iloc[-1]
+        ema_200 = df['close'].ewm(span=200, adjust=False).mean().iloc[-1]
+        
+        # Trend Detection: Price EMA ke upar hai ya neeche?
+        if current_price > ema_200:
+            trend = "BULLISH"
+            # LONG SETUP: Dip par buy karenge
+            entry_price = round(current_price - 100)
+            sl_price = entry_price - 500
+            tp_price = entry_price + 1000
+        else:
+            trend = "BEARISH"
+            # SHORT SETUP: Thoda bounce aane par sell karenge
+            entry_price = round(current_price + 100)
+            sl_price = entry_price + 500
+            tp_price = entry_price - 1000
+            
+        return current_price, ema_200, trend, entry_price, sl_price, tp_price
     except Exception as e:
-        return None
+        return None, None, str(e), None, None, None
 
-# Start Message
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "Ram Ram ji 'Akash set and forget bot' zinda ho gaya hai! 🎯 /setup dabao aur naya order dekho.")
+    bot.reply_to(message, "Bhai, 'Akash Trend-Following Bot' active ho gaya hai! 🎯 /setup dabao.")
 
-# Asli Magic: Set and Forget Logic
 @bot.message_handler(commands=['setup'])
 def send_setup(message):
-    bot.reply_to(message, "Market check kar raha hoon, 2 second do... ⏳")
+    bot.reply_to(message, "Market trend scan ho raha hai, Long ya Short decide kar raha hoon... ⏳")
     
-    current_price = get_btc_price()
+    current_price, ema_200, trend, entry, sl, tp = analyze_trend_and_setup()
     
-    if current_price:
-        # Sniper Logic: Price se $100 niche ka jaal, 500 SL, 1000 TP
-        entry_price = round(current_price - 100)
-        sl_price = entry_price - 500
-        tp_price = entry_price + 1000
-        
-        reply_text = f"""🔥 **AKASH SET & FORGET SETUP** 🔥
-        
-📈 **Live BTC Price:** ${current_price:,.2f}
+    if current_price and isinstance(ema_200, float):
+        if trend == "BULLISH":
+            signal_title = "🟢 **LONG (BUY) SETUP -- UPTREND**"
+            strategy_msg = "Market 200 EMA ke upar hai, trend bullish hai. Dip buy setup ready hai!"
+        else:
+            signal_title = "🔴 **SHORT (SELL) SETUP -- DOWNTREND**"
+            strategy_msg = "Market 200 EMA ke neeche hai, trend bearish hai. Bounce sell setup ready hai!"
 
-🎯 **Entry (Limit Buy):** ${entry_price:,.2f}
-🛑 **Stop Loss (SL):** ${sl_price:,.2f}
-💰 **Take Profit (TP):** ${tp_price:,.2f}
+        reply_text = f"""{signal_title}
+        
+📊 **Trend Status:** {trend}
+📈 **Live BTC Price:** ${current_price:,.2f}
+⚓ **200 EMA Level:** ${ema_200:,.2f}
+
+{strategy_msg}
+🎯 **Entry Price:** ${entry:,.2f}
+🛑 **Stop Loss (SL):** ${sl:,.2f}
+💰 **Take Profit (TP):** ${tp:,.2f}
 
 ⚖️ **Risk/Reward:** 1:2
-Delta app mein feed karo aur aaram se so jao! 💸"""
+Trend is your friend! Delta mein feed karo. 🚀"""
         
         bot.reply_to(message, reply_text)
     else:
-        bot.reply_to(message, "Bhai, server se live price nahi mil raha. Thodi der mein try karna!")
+        bot.reply_to(message, f"Bhai, error aa gaya: {trend}")
 
 def run_bot():
     bot.infinity_polling()
