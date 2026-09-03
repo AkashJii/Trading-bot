@@ -22,7 +22,7 @@ def analyze_market_and_setup():
         data = response.json()
         
         if not isinstance(data, list):
-            return None, None, "API Error", None, None, None, None, None
+            return None, None, 50, "API Error", None, None, None, None
 
         df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'qav', 'num_trades', 'taker_base_vol', 'taker_quote_vol', 'ignore'])
         df['close'] = df['close'].astype(float)
@@ -38,34 +38,26 @@ def analyze_market_and_setup():
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rs = gain / loss
         rsi = 100 - (100 / (1 + rs))
-        current_rsi = rsi.iloc[-1]
-        
-        # Pro Human Logic: Pullback & Structure
-        # Agar price 200 EMA se bohot door hai, toh exhaustion warning denge
-        distance_from_ema = ((current_price - ema_200) / ema_200) * 100
+        current_rsi = float(rsi.iloc[-1])
         
         if current_price > ema_200:
             trend = "BULLISH (UPTREND)"
             direction = "LONG"
-            # Pro trader pullback ka wait karta hai (EMA ke paas entry)
             entry = round(ema_200 + 20, 2) if current_price > (ema_200 * 1.02) else round(current_price, 2)
-            # Recent swing low ya EMA ke thoda niche SL
             sl = round(df['low'].iloc[-5:].min() - 50, 2)
             risk = entry - sl
-            tp = round(entry + (risk * 2), 2)  # 1:2 R:R
+            tp = round(entry + (risk * 2), 2)
         else:
             trend = "BEARISH (DOWNTREND)"
             direction = "SHORT"
-            # Pro trader resistance/EMA ke paas se short ka wait karta hai
             entry = round(ema_200 - 20, 2) if current_price < (ema_200 * 0.98) else round(current_price, 2)
-            # Recent swing high ya EMA ke thoda upar SL
             sl = round(df['high'].iloc[-5:].max() + 50, 2)
             risk = sl - entry
-            tp = round(entry - (risk * 2), 2)  # 1:2 R:R
+            tp = round(entry - (risk * 2), 2)
             
         return current_price, ema_200, current_rsi, trend, entry, sl, tp, direction
     except Exception as e:
-        return None, None, 50, str(e), None, None, None, None
+        return None, None, 50.0, str(e), None, None, None, None
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -73,7 +65,7 @@ def send_welcome(message):
 
 @bot.message_handler(commands=['setup'])
 def send_setup(message):
-    bot.reply_to(message, "🔍 Market structure, RSI aur Pullback levels analyze ho rahe hain...")
+    bot.reply_to(message, "🔍 Market structure, RSI aur Pullback levels analyze ho rahe हैं...")
     
     price, ema, rsi, trend, entry, sl, tp, direction = analyze_market_and_setup()
     
@@ -109,10 +101,12 @@ def send_setup(message):
 @bot.message_handler(commands=['paper'])
 def start_paper_trade(message):
     price, ema, rsi, trend, entry, sl, tp, direction = analyze_market_and_setup()
-    if price:
+    if price and isinstance(ema, float):
         trade_id = message.chat.id
         active_paper_trades[trade_id] = {"direction": direction, "entry": entry, "sl": sl, "tp": tp, "status": "RUNNING"}
         bot.reply_to(message, f"📝 **Smart Paper Trade Logged!** {direction} at ${entry:,.2f} (SL: ${sl:,.2f}, TP: ${tp:,.2f}). Use `/result` to track.")
+    else:
+        bot.reply_to(message, "Error starting paper trade.")
 
 @bot.message_handler(commands=['result'])
 def check_paper_result(message):
@@ -128,139 +122,22 @@ def check_paper_result(message):
         
         res_msg = f"📊 **TRADE STATUS**\nLive: ${current_price:,.2f} | Entry: ${entry:,.2f}\n\n"
         if direction == "LONG":
-            if current_price >= tp: res_msg += "✅ **TARGET HIT! (PROFIT 🎉)**"
-            elif current_price <= sl: res_msg += "❌ **STOP LOSS HIT!**"
-            else: res_msg += f"⏳ **RUNNING** (P&L: ${current_price - entry:+.2f})"
+            if current_price >= tp:
+                res_msg += "✅ **TARGET HIT! (PROFIT 🎉)**"
+            elif current_price <= sl:
+                res_msg += "❌ **STOP LOSS HIT!**"
+            else:
+                res_msg += f"⏳ **RUNNING** (P&L: ${current_price - entry:+.2f})"
         else:
-            if current_price <= tp: res_msg += "✅ **TARGET HIT! (PROFIT 🎉)**"
-            elif current_price >= sl: res_msg += "❌ **STOP LOSS HIT!**"
-            else: res_msg += f"⏳ **RUNNING** (P&L: ${entry - current_price:+.2f})"
+            if current_price <= tp:
+                res_msg += "✅ **TARGET HIT! (PROFIT 🎉)**"
+            elif current_price >= sl:
+                res_msg += "❌ **STOP LOSS HIT!**"
+            else:
+                res_msg += f"⏳ **RUNNING** (P&L: ${entry - current_price:+.2f})"
         bot.reply_to(message, res_msg)
     except Exception as e:
         bot.reply_to(message, f"Error: {e}")
-
-def run_bot():
-    bot.infinity_polling()
-
-if __name__ == "__main__":
-    threading.Thread(target=run_bot).start()
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
-    if trade_id not in active_paper_trades:
-        bot.reply_to(message, "Bhai, pehle `/paper` se trade shuru karo!")
-        return
-        
-    trade = active_paper_trades[trade_id]
-    url = "https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=5"
-    try:
-        res = requests.get(url, timeout=5).json()
-        current_price = float(res[-1][4])
-        
-        entry = trade["entry"]
-        sl = trade["sl"]
-        tp = trade["tp"]
-        direction = trade["direction"]
-        
-        result_msg = f"📊 **TRADE STATUS**\nLive Price: ${current_price:,.2f}\nEntry: ${entry:,.2f}\n\n"
-        
-        if direction == "LONG":
-            if current_price >= tp:
-                result_msg += "✅ **STATUS: TARGET HIT! (PROFIT 🎉)**"
-            elif current_price <= sl:
-                result_msg += "❌ **STATUS: STOP LOSS HIT!**"
-            else:
-                diff = current_price - entry
-                result_msg += f"⏳ **STATUS: RUNNING** (P&L: ${diff:+.2f})"
-        else:
-            if current_price <= tp:
-                result_msg += "✅ **STATUS: TARGET HIT! (PROFIT 🎉)**"
-            elif current_price >= sl:
-                result_msg += "❌ **STATUS: STOP LOSS HIT!**"
-            else:
-                diff = entry - current_price
-                result_msg += f"⏳ **STATUS: RUNNING** (P&L: ${diff:+.2f})"
-                
-        bot.reply_to(message, result_msg)
-    except Exception as e:
-        bot.reply_to(message, f"Error: {e}")
-
-def run_bot():
-    bot.infinity_polling()
-
-if __name__ == "__main__":
-    threading.Thread(target=run_bot).start()
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
-        current_price = float(res[-1][4])
-        
-        entry = trade["entry"]
-        sl = trade["sl"]
-        tp = trade["tp"]
-        direction = trade["direction"]
-        
-        result_msg = f"📊 **PAPER TRADE STATUS**\nLive Price: ${current_price:,.2f}\nEntry: ${entry:,.2f}\n\n"
-        
-        if direction == "LONG":
-            if current_price >= tp:
-                result_msg += "✅ **STATUS: TARGET HIT! (PROFIT 🎉)**"
-            elif current_price <= sl:
-                result_msg += "❌ **STATUS: STOP LOSS HIT!**"
-            else:
-                diff = current_price - entry
-                result_msg += f"⏳ **STATUS: RUNNING** (P&L: ${diff:+.2f})"
-        else: # SHORT
-            if current_price <= tp:
-                result_msg += "✅ **STATUS: TARGET HIT! (PROFIT 🎉)**"
-            elif current_price >= sl:
-                result_msg += "❌ **STATUS: STOP LOSS HIT!**"
-            else:
-                diff = entry - current_price
-                result_msg += f"⏳ **STATUS: RUNNING** (P&L: ${diff:+.2f})"
-                
-        bot.reply_to(message, result_msg)
-    except Exception as e:
-        bot.reply_to(message, f"Result check karne mein error: {e}")
-
-def run_bot():
-    bot.infinity_polling()
-
-if __name__ == "__main__":
-    threading.Thread(target=run_bot).start()
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
-    # Current price fetch karo check karne ke liye
-    url = "https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=5"
-    try:
-        res = requests.get(url, timeout=5).json()
-        current_price = float(res[-1][4])
-        
-        entry = trade["entry"]
-        sl = trade["sl"]
-        tp = trade["tp"]
-        direction = trade["direction"]
-        
-        result_msg = f"📊 **PAPER TRADE STATUS**\nLive Price: ${current_price:,.2f}\nEntry: ${entry:,.2f}\n\n"
-        
-        if direction == "LONG":
-            if current_price >= tp:
-                result_msg += "✅ **STATUS: TARGET HIT! (PROFIT 🎉)**"
-            elif current_price <= sl:
-                result_msg += "❌ **STATUS: STOP LOSS HIT! (LESSON LEARNED 📚)**"
-            else:
-                diff = current_price - entry
-                result_msg += f"⏳ **STATUS: RUNNING** (P&L: ${diff:+.2f})"
-        else: # SHORT
-            if current_price <= tp:
-                result_msg += "✅ **STATUS: TARGET HIT! (PROFIT 🎉)**"
-            elif current_price >= sl:
-                result_msg += "❌ **STATUS: STOP LOSS HIT! (LESSON LEARNED 📚)**"
-            else:
-                diff = entry - current_price
-                result_msg += f"⏳ **STATUS: RUNNING** (P&L: ${diff:+.2f})"
-                
-        bot.reply_to(message, result_msg)
-    except Exception as e:
-        bot.reply_to(message, f"Result check karne mein error: {e}")
 
 def run_bot():
     bot.infinity_polling()
