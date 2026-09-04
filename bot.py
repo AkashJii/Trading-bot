@@ -61,11 +61,11 @@ def analyze_market_and_setup():
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "🎯 **Akash Pro Human-Logic Bot** active hai!\n\nCommands:\n/setup - Pro Pullback Setup\n/paper - Virtual Trade")
+    bot.reply_to(message, "🎯 **Akash Pro Human-Logic Bot** active hai!\n\nCommands:\n/setup - Pro Pullback Setup\n/paper - Virtual Trade Start\n/result - Check Trade Status & P&L")
 
 @bot.message_handler(commands=['setup'])
 def send_setup(message):
-    bot.reply_to(message, "🔍 Market structure, RSI aur Pullback levels analyze ho rahe हैं...")
+    bot.reply_to(message, "🔍 Market structure, RSI aur Pullback levels analyze ho rahe hain...")
     
     price, ema, rsi, trend, entry, sl, tp, direction = analyze_market_and_setup()
     
