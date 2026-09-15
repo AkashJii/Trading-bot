@@ -4,6 +4,7 @@ import threading
 import os
 import requests
 import pandas as pd
+import numpy as np
 
 TOKEN = '8665827387:AAEDbbZSPvJ_z6wGJHCN7CvuBYoGsi3Fv9A'
 bot = telebot.TeleBot(TOKEN)
@@ -13,86 +14,103 @@ active_paper_trades = {}
 
 @app.route('/')
 def index():
-    return "Akash Pro Human-Logic Bot Active Hai!"
+    return "Akash Pro Quant Algo Bot Active Hai!"
+
+def calculate_atr(df, period=14):
+    high_low = df['high'] - df['low']
+    high_close = np.abs(df['high'] - df['close'].shift())
+    low_close = np.abs(df['low'] - df['close'].shift())
+    ranges = pd.concat([high_low, high_close, low_close], axis=1)
+    true_range = ranges.max(axis=1)
+    return true_range.rolling(window=period).mean()
 
 def analyze_market_and_setup():
     try:
-        url = "https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=250"
-        response = requests.get(url, timeout=10)
-        data = response.json()
+        # 1-Hour Data for Macro Trend & 200 EMA (Lohe ka Farsh)
+        url_1h = "https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=250"
+        resp_1h = requests.get(url_1h, timeout=10).json()
+        df_1h = pd.DataFrame(resp_1h, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'qav', 'num_trades', 'taker_base_vol', 'taker_quote_vol', 'ignore'])
+        df_1h['close'] = df_1h['close'].astype(float)
+        df_1h['high'] = df_1h['high'].astype(float)
+        df_1h['low'] = df_1h['low'].astype(float)
         
-        if not isinstance(data, list):
-            return None, None, 50, "API Error", None, None, None, None
-
-        df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'qav', 'num_trades', 'taker_base_vol', 'taker_quote_vol', 'ignore'])
-        df['close'] = df['close'].astype(float)
-        df['high'] = df['high'].astype(float)
-        df['low'] = df['low'].astype(float)
+        current_price = df_1h['close'].iloc[-1]
+        ema_200 = df_1h['close'].ewm(span=200, adjust=False).mean().iloc[-1]
         
-        current_price = df['close'].iloc[-1]
-        ema_200 = df['close'].ewm(span=200, adjust=False).mean().iloc[-1]
+        # 15-Minute Data for Micro Trend & ATR Buffer
+        url_15m = "https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=100"
+        resp_15m = requests.get(url_15m, timeout=10).json()
+        df_15m = pd.DataFrame(resp_15m, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'qav', 'num_trades', 'taker_base_vol', 'taker_quote_vol', 'ignore'])
+        df_15m['close'] = df_15m['close'].astype(float)
+        df_15m['high'] = df_15m['high'].astype(float)
+        df_15m['low'] = df_15m['low'].astype(float)
         
-        # RSI Calculation (14 period)
-        delta = df['close'].diff()
+        atr = calculate_atr(df_15m).iloc[-1]
+        
+        # RSI Calculation (14 period on 1h)
+        delta = df_1h['close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rs = gain / loss
         rsi = 100 - (100 / (1 + rs))
         current_rsi = float(rsi.iloc[-1])
         
+        # Multi-Timeframe Alignment Logic
         if current_price > ema_200:
             trend = "BULLISH (UPTREND)"
             direction = "LONG"
-            entry = round(ema_200 + 20, 2) if current_price > (ema_200 * 1.02) else round(current_price, 2)
-            sl = round(df['low'].iloc[-5:].min() - 50, 2)
+            entry = round(current_price, 2)
+            # ATR Based Dynamic Stop Loss to prevent noise hunting
+            sl = round(df_15m['low'].iloc[-5:].min() - (atr * 0.5), 2)
             risk = entry - sl
             tp = round(entry + (risk * 2), 2)
         else:
             trend = "BEARISH (DOWNTREND)"
             direction = "SHORT"
-            entry = round(ema_200 - 20, 2) if current_price < (ema_200 * 0.98) else round(current_price, 2)
-            sl = round(df['high'].iloc[-5:].max() + 50, 2)
+            entry = round(current_price, 2)
+            sl = round(df_15m['high'].iloc[-5:].max() + (atr * 0.5), 2)
             risk = sl - entry
             tp = round(entry - (risk * 2), 2)
             
-        return current_price, ema_200, current_rsi, trend, entry, sl, tp, direction
+        return current_price, ema_200, current_rsi, trend, entry, sl, tp, direction, atr
     except Exception as e:
-        return None, None, 50.0, str(e), None, None, None, None
+        return None, None, 50.0, str(e), None, None, None, None, 0
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "🎯 **Akash Pro Human-Logic Bot** active hai!\n\nCommands:\n/setup - Pro Pullback Setup\n/paper - Virtual Trade Start\n/result - Check Trade Status & P&L")
+    bot.reply_to(message, "🎯 **Akash Pro Quant Algo Bot** active hai!\n\nCommands:\n/setup - Multi-Timeframe Pro Setup\n/paper - Virtual Trade Start\n/result - Check Trade Status & P&L")
 
 @bot.message_handler(commands=['setup'])
 def send_setup(message):
-    bot.reply_to(message, "🔍 Market structure, RSI aur Pullback levels analyze ho rahe hain...")
+    bot.reply_to(message, "🔍 1h & 15m Multi-Timeframe, ATR aur RSI data analyze ho raha hai...")
     
-    price, ema, rsi, trend, entry, sl, tp, direction = analyze_market_and_setup()
+    price, ema, rsi, trend, entry, sl, tp, direction, atr = analyze_market_and_setup()
     
     if price and isinstance(ema, float):
         warning = ""
         if rsi > 70:
-            warning = "\n⚠️ **WARNING:** RSI Overbought (>70) hai! Chase mat karna, pullback ka wait karo."
+            warning = "\n⚠️ **WARNING:** RSI Overbought (>70) hai! Pullback ka dhyan rakhein."
         elif rsi < 30:
-            warning = "\n⚠️ **WARNING:** RSI Oversold (<30) hai! Jaldbaazi mat karo."
+            warning = "\n⚠️ **WARNING:** RSI Oversold (<30) hai! Jaldbaazi mat karein."
             
         risk_pts = abs(entry - sl)
         reward_pts = abs(tp - entry)
         
-        reply_text = f"""📊 **PRO HUMAN TRADER SETUP** 📊
+        reply_text = f"""📊 **PRO QUANT ALGO SETUP (MULTI-TF)** 📊
         
-📈 **Trend:** {trend}
+📈 **Trend (1h):** {trend}
 💰 **Live BTC Price:** ${price:,.2f}
 ⚓ **Lohe ka Farsh (200 EMA):** ${ema:,.2f}
 📉 **RSI (14):** {rsi:.2f}
+🛡️ **ATR Buffer (Volatility):** {atr:.2f}
 {warning}
 
 🎯 **Smart Direction:** {direction}
-📍 **Planned Entry (Pullback Level):** ${entry:,.2f}
-🛑 **Structure Stop Loss:** ${sl:,.2f} ({risk_pts:.2f} pts risk)
+📍 **Planned Entry:** ${entry:,.2f}
+🛑 **ATR Dynamic Stop Loss:** ${sl:,.2f} ({risk_pts:.2f} pts risk)
 💰 **Take Profit Target (1:2):** ${tp:,.2f} ({reward_pts:.2f} pts reward)
 
-🛡️ *Logic:* No blind chasing. Built with structure & RSI filter! 🚀"""
+🚀 *Algo Status:* Optimized with Multi-Timeframe & ATR filters!"""
         
         bot.reply_to(message, reply_text)
     else:
@@ -100,11 +118,11 @@ def send_setup(message):
 
 @bot.message_handler(commands=['paper'])
 def start_paper_trade(message):
-    price, ema, rsi, trend, entry, sl, tp, direction = analyze_market_and_setup()
+    price, ema, rsi, trend, entry, sl, tp, direction, atr = analyze_market_and_setup()
     if price and isinstance(ema, float):
         trade_id = message.chat.id
         active_paper_trades[trade_id] = {"direction": direction, "entry": entry, "sl": sl, "tp": tp, "status": "RUNNING"}
-        bot.reply_to(message, f"📝 **Smart Paper Trade Logged!** {direction} at ${entry:,.2f} (SL: ${sl:,.2f}, TP: ${tp:,.2f}). Use `/result` to track.")
+        bot.reply_to(message, f"📝 **Algo Paper Trade Logged!** {direction} at ${entry:,.2f} (SL: ${sl:,.2f}, TP: ${tp:,.2f}). Use `/result` to track.")
     else:
         bot.reply_to(message, "Error starting paper trade.")
 
@@ -120,7 +138,7 @@ def check_paper_result(message):
         current_price = float(res[-1][4])
         entry, sl, tp, direction = trade["entry"], trade["sl"], trade["tp"], trade["direction"]
         
-        res_msg = f"📊 **TRADE STATUS**\nLive: ${current_price:,.2f} | Entry: ${entry:,.2f}\n\n"
+        res_msg = f"📊 **ALGO TRADE STATUS**\nLive: ${current_price:,.2f} | Entry: ${entry:,.2f}\n\n"
         if direction == "LONG":
             if current_price >= tp:
                 res_msg += "✅ **TARGET HIT! (PROFIT 🎉)**"
