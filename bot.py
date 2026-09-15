@@ -15,16 +15,16 @@ TOKEN = '8665827387:AAEDbbZSPvJ_z6wGJHCN7CvuBYoGsi3Fv9A'
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-# Delta Exchange API Credentials (Render Environment variables se uthayega)
+# Delta Exchange Live API Credentials
 DELTA_API_KEY = os.environ.get('DELTA_API_KEY', 'YOUR_API_KEY')
 DELTA_API_SECRET = os.environ.get('DELTA_API_SECRET', 'YOUR_API_SECRET')
-DELTA_BASE_URL = "https://testnet-api.delta.exchange"
+DELTA_BASE_URL = "https://api.delta.exchange"
 
-active_paper_trades = {}
+active_trades = {}
 
 @app.route('/')
 def index():
-    return "Akash Fully Automated Delta Quant Bot Active Hai!"
+    return "Akash Set & Forget Quant Bot Active Hai!"
 
 def get_main_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -90,18 +90,15 @@ def analyze_market_and_setup():
     except Exception as e:
         return None, None, 50.0, str(e), None, None, None, None, 0
 
-def place_delta_testnet_order(direction, entry, sl, tp):
-    # Delta Exchange signature generation function for automated order execution
+def place_delta_live_order(direction, entry, sl, tp):
     try:
         path = "/v2/orders"
         url = DELTA_BASE_URL + path
         timestamp = str(int(time.time()))
         
-        # Delta product ID for BTCUSD or BTCUSDT perpetual can be mapped here
-        # Example payload structure for market/limit order with stop loss and take profit
         payload = {
-            "product_id": 27, # BTCUSD perpetual standard ID on Delta testnet/live
-            "size": 1,        # Contract size
+            "product_id": 27, # BTCUSD perpetual standard ID
+            "size": 1,        # Minimal contract size for controlled risk
             "side": "buy" if direction == "LONG" else "sell",
             "order_type": "market",
             "stop_loss_price": str(sl),
@@ -119,7 +116,6 @@ def place_delta_testnet_order(direction, entry, sl, tp):
             'Content-Type': 'application/json'
         }
         
-        # If API keys are set, fire real request; otherwise return simulation success
         if DELTA_API_KEY != 'YOUR_API_KEY' and DELTA_API_SECRET != 'YOUR_API_SECRET':
             response = requests.post(url, data=payload_str, headers=headers, timeout=10)
             return response.status_code == 200, response.json()
@@ -131,11 +127,11 @@ def place_delta_testnet_order(direction, entry, sl, tp):
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     markup = get_main_keyboard()
-    bot.reply_to(message, "🎯 **Akash Fully Automated Quant Bot** active hai!\n\nNeeche diye gaye buttons se control karein:", reply_markup=markup)
+    bot.reply_to(message, "⚙️ **Akash Set & Forget Quant Bot** active hai!\n\nNeeche diye gaye buttons se control karein:", reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text in ['📊 Get Setup', '/setup'])
 def send_setup(message):
-    bot.reply_to(message, "🔍 Analyzing Multi-Timeframe & ATR data...")
+    bot.reply_to(message, "🔍 Scanning Multi-Timeframe Trend & ATR...")
     price, ema, rsi, trend, entry, sl, tp, direction, atr = analyze_market_and_setup()
     
     if price and isinstance(ema, float):
@@ -143,7 +139,7 @@ def send_setup(message):
         risk_pts = abs(entry - sl)
         reward_pts = abs(tp - entry)
         
-        reply_text = f"""📊 **PRO QUANT SETUP (AUTO-READY)** 📊
+        reply_text = f"""📊 **SET & FORGET QUANT SETUP** 📊
         
 📈 **Trend (1h):** {trend}
 💰 **Live BTC Price:** ${price:,.2f}
@@ -157,7 +153,7 @@ def send_setup(message):
 🛑 **Stop Loss:** ${sl:,.2f} ({risk_pts:.2f} pts)
 💰 **Take Profit:** ${tp:,.2f} ({reward_pts:.2f} pts)
 
-🚀 *Status:* Ready for automated execution!"""
+🚀 *Status:* Ready for Set & Forget execution!"""
         bot.reply_to(message, reply_text, reply_markup=get_main_keyboard())
     else:
         bot.reply_to(message, "Error fetching market data!", reply_markup=get_main_keyboard())
@@ -167,8 +163,8 @@ def start_paper_trade(message):
     price, ema, rsi, trend, entry, sl, tp, direction, atr = analyze_market_and_setup()
     if price and isinstance(ema, float):
         trade_id = message.chat.id
-        active_paper_trades[trade_id] = {"direction": direction, "entry": entry, "sl": sl, "tp": tp, "status": "RUNNING"}
-        bot.reply_to(message, f"📝 **Paper Trade Logged!** {direction} at ${entry:,.2f}. Use 'Check Result' to track.", reply_markup=get_main_keyboard())
+        active_trades[trade_id] = {"direction": direction, "entry": entry, "sl": sl, "tp": tp, "status": "RUNNING"}
+        bot.reply_to(message, f"📝 **Paper Trade Logged (Set & Forget)!** {direction} at ${entry:,.2f}. Use 'Check Result' to track.", reply_markup=get_main_keyboard())
     else:
         bot.reply_to(message, "Error starting paper trade.", reply_markup=get_main_keyboard())
 
@@ -179,26 +175,28 @@ def execute_delta_autotrade(message):
         bot.reply_to(message, "Market data fetch error for auto-trade.", reply_markup=get_main_keyboard())
         return
         
-    success, res_data = place_delta_testnet_order(direction, entry, sl, tp)
+    success, res_data = place_delta_live_order(direction, entry, sl, tp)
     
     if success:
-        bot.reply_to(message, f"⚡ **Delta Testnet Order Executed Successfully!**\n\nSide: {direction}\nEntry: ${entry:,.2f}\nSL: ${sl:,.2f}\nTP: ${tp:,.2f}\n\nResponse: {res_data}", reply_markup=get_main_keyboard())
+        trade_id = message.chat.id
+        active_trades[trade_id] = {"direction": direction, "entry": entry, "sl": sl, "tp": tp, "status": "RUNNING"}
+        bot.reply_to(message, f"⚡ **Delta Set & Forget Order Executed!**\n\nSide: {direction}\nEntry: ${entry:,.2f}\nSL: ${sl:,.2f}\nTP: ${tp:,.2f}\n\nResponse: {res_data}", reply_markup=get_main_keyboard())
     else:
         bot.reply_to(message, f"❌ **Order Execution Failed:** {res_data}", reply_markup=get_main_keyboard())
 
 @bot.message_handler(func=lambda message: message.text in ['📈 Check Result', '/result'])
 def check_paper_result(message):
     trade_id = message.chat.id
-    if trade_id not in active_paper_trades:
-        bot.reply_to(message, "Pehle 'Paper Trade' button se trade shuru karo!", reply_markup=get_main_keyboard())
+    if trade_id not in active_trades:
+        bot.reply_to(message, "Pehle 'Paper Trade' ya 'Auto Trade' se setup shuru karo!", reply_markup=get_main_keyboard())
         return
-    trade = active_paper_trades[trade_id]
+    trade = active_trades[trade_id]
     try:
         res = requests.get("https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=5", timeout=5).json()
         current_price = float(res[-1][4])
         entry, sl, tp, direction = trade["entry"], trade["sl"], trade["tp"], trade["direction"]
         
-        res_msg = f"📊 **TRADE STATUS**\nLive: ${current_price:,.2f} | Entry: ${entry:,.2f}\n\n"
+        res_msg = f"📊 **SET & FORGET STATUS**\nLive: ${current_price:,.2f} | Entry: ${entry:,.2f}\n\n"
         if direction == "LONG":
             if current_price >= tp: res_msg += "✅ **TARGET HIT! (PROFIT 🎉)**"
             elif current_price <= sl: res_msg += "❌ **STOP LOSS HIT!**"
