@@ -18,7 +18,7 @@ app = Flask(__name__)
 # Direct Hardcoded Live Credentials (No Environment Variable Confusion)
 DELTA_API_KEY = "TZw2k35xFfkFCJJcxTfWCSAllqSy7"
 DELTA_API_SECRET = "EFmEL09TTZJQJk9VaVV5woeN4knWpxexLEljmkQIKcpfmkGochXursGd1viH"
-DELTA_BASE_URL = "https://api.delta.exchange"
+DELTA_BASE_URL = "https://api.india.delta.exchange"
 
 active_trades = {}
 
