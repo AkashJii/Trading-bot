@@ -15,7 +15,7 @@ TOKEN = '8665827387:AAEDbbZSPvJ_z6wGJHCN7CvuBYoGsi3Fv9A'
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-# Delta Exchange Live API Credentials
+# Delta Live Credentials
 DELTA_API_KEY = os.environ.get('DELTA_API_KEY', 'YOUR_API_KEY')
 DELTA_API_SECRET = os.environ.get('DELTA_API_SECRET', 'YOUR_API_SECRET')
 DELTA_BASE_URL = "https://api.delta.exchange"
@@ -24,7 +24,7 @@ active_trades = {}
 
 @app.route('/')
 def index():
-    return "Akash Set & Forget Quant Bot Active Hai!"
+    return "Akash Live Set & Forget Quant Bot Active Hai!"
 
 def get_main_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -97,15 +97,15 @@ def place_delta_live_order(direction, entry, sl, tp):
         timestamp = str(int(time.time()))
         
         payload = {
-            "product_id": 27, # BTCUSD perpetual standard ID
-            "size": 1,        # Minimal contract size for controlled risk
+            "product_id": 27, # BTCUSD perpetual standard ID on Delta Live
+            "size": 1,        # Minimum safe contract size
             "side": "buy" if direction == "LONG" else "sell",
             "order_type": "market",
             "stop_loss_price": str(sl),
             "take_profit_price": str(tp)
         }
         
-        payload_str = json.dumps(payload)
+        payload_str = json.dumps(payload, separators=(',', ':'))
         message_signature = timestamp + "POST" + path + payload_str
         signature = hmac.new(DELTA_API_SECRET.encode('utf-8'), message_signature.encode('utf-8'), hashlib.sha256).hexdigest()
         
@@ -118,20 +118,20 @@ def place_delta_live_order(direction, entry, sl, tp):
         
         if DELTA_API_KEY != 'YOUR_API_KEY' and DELTA_API_SECRET != 'YOUR_API_SECRET':
             response = requests.post(url, data=payload_str, headers=headers, timeout=10)
-            return response.status_code == 200, response.json()
+            return response.status_code in [200, 201], response.json()
         else:
-            return True, {"status": "Simulated Success (API Keys pending)"}
+            return True, {"status": "Simulated Success (API Keys missing)"}
     except Exception as e:
         return False, str(e)
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     markup = get_main_keyboard()
-    bot.reply_to(message, "⚙️ **Akash Set & Forget Quant Bot** active hai!\n\nNeeche diye gaye buttons se control karein:", reply_markup=markup)
+    bot.reply_to(message, "⚡ **Akash Live Quant Bot** active hai!\n\nNeeche diye gaye buttons se control karein:", reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text in ['📊 Get Setup', '/setup'])
 def send_setup(message):
-    bot.reply_to(message, "🔍 Scanning Multi-Timeframe Trend & ATR...")
+    bot.reply_to(message, "🔍 Scanning Live Market Setup...")
     price, ema, rsi, trend, entry, sl, tp, direction, atr = analyze_market_and_setup()
     
     if price and isinstance(ema, float):
@@ -139,7 +139,7 @@ def send_setup(message):
         risk_pts = abs(entry - sl)
         reward_pts = abs(tp - entry)
         
-        reply_text = f"""📊 **SET & FORGET QUANT SETUP** 📊
+        reply_text = f"""📊 **LIVE QUANT SETUP** 📊
         
 📈 **Trend (1h):** {trend}
 💰 **Live BTC Price:** ${price:,.2f}
@@ -153,7 +153,7 @@ def send_setup(message):
 🛑 **Stop Loss:** ${sl:,.2f} ({risk_pts:.2f} pts)
 💰 **Take Profit:** ${tp:,.2f} ({reward_pts:.2f} pts)
 
-🚀 *Status:* Ready for Set & Forget execution!"""
+🚀 *Status:* Ready for Live Execution!"""
         bot.reply_to(message, reply_text, reply_markup=get_main_keyboard())
     else:
         bot.reply_to(message, "Error fetching market data!", reply_markup=get_main_keyboard())
@@ -164,7 +164,7 @@ def start_paper_trade(message):
     if price and isinstance(ema, float):
         trade_id = message.chat.id
         active_trades[trade_id] = {"direction": direction, "entry": entry, "sl": sl, "tp": tp, "status": "RUNNING"}
-        bot.reply_to(message, f"📝 **Paper Trade Logged (Set & Forget)!** {direction} at ${entry:,.2f}. Use 'Check Result' to track.", reply_markup=get_main_keyboard())
+        bot.reply_to(message, f"📝 **Paper Trade Logged!** {direction} at ${entry:,.2f}.", reply_markup=get_main_keyboard())
     else:
         bot.reply_to(message, "Error starting paper trade.", reply_markup=get_main_keyboard())
 
@@ -180,7 +180,7 @@ def execute_delta_autotrade(message):
     if success:
         trade_id = message.chat.id
         active_trades[trade_id] = {"direction": direction, "entry": entry, "sl": sl, "tp": tp, "status": "RUNNING"}
-        bot.reply_to(message, f"⚡ **Delta Set & Forget Order Executed!**\n\nSide: {direction}\nEntry: ${entry:,.2f}\nSL: ${sl:,.2f}\nTP: ${tp:,.2f}\n\nResponse: {res_data}", reply_markup=get_main_keyboard())
+        bot.reply_to(message, f"⚡ **Delta Live Order Executed!**\n\nSide: {direction}\nEntry: ${entry:,.2f}\nSL: ${sl:,.2f}\nTP: ${tp:,.2f}\n\nResponse: {res_data}", reply_markup=get_main_keyboard())
     else:
         bot.reply_to(message, f"❌ **Order Execution Failed:** {res_data}", reply_markup=get_main_keyboard())
 
@@ -188,7 +188,7 @@ def execute_delta_autotrade(message):
 def check_paper_result(message):
     trade_id = message.chat.id
     if trade_id not in active_trades:
-        bot.reply_to(message, "Pehle 'Paper Trade' ya 'Auto Trade' se setup shuru karo!", reply_markup=get_main_keyboard())
+        bot.reply_to(message, "Pehle setup ya trade shuru karo!", reply_markup=get_main_keyboard())
         return
     trade = active_trades[trade_id]
     try:
@@ -196,15 +196,15 @@ def check_paper_result(message):
         current_price = float(res[-1][4])
         entry, sl, tp, direction = trade["entry"], trade["sl"], trade["tp"], trade["direction"]
         
-        res_msg = f"📊 **SET & FORGET STATUS**\nLive: ${current_price:,.2f} | Entry: ${entry:,.2f}\n\n"
+        res_msg = f"📊 **LIVE TRADE STATUS**\nLive: ${current_price:,.2f} | Entry: ${entry:,.2f}\n\n"
         if direction == "LONG":
             if current_price >= tp: res_msg += "✅ **TARGET HIT! (PROFIT 🎉)**"
             elif current_price <= sl: res_msg += "❌ **STOP LOSS HIT!**"
             else: res_msg += f"⏳ **RUNNING** (P&L: ${current_price - entry:+.2f})"
         else:
-            if current_price <= tp: res_msg += "✅ **TARGET HIT! (PROFIT 🎉)**"
-            elif current_price >= sl: res_msg += "❌ **STOP LOSS HIT!**"
-            else: res_msg += f"⏳ **RUNNING** (P&L: ${entry - current_price:,.2f})"
+            if current_price <= sl: res_msg += "❌ **STOP LOSS HIT!**"
+            elif current_price <= tp: res_msg += "✅ **TARGET HIT! (PROFIT 🎉)**"
+            else: res_msg += f"⏳ **RUNNING** (P&L: ${entry - current_price:+.2f})"
         bot.reply_to(message, res_msg, reply_markup=get_main_keyboard())
     except Exception as e:
         bot.reply_to(message, f"Error: {e}", reply_markup=get_main_keyboard())
