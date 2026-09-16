@@ -15,16 +15,16 @@ TOKEN = '8665827387:AAEDbbZSPvJ_z6wGJHCN7CvuBYoGsi3Fv9A'
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-# Delta Live Credentials
-DELTA_API_KEY = os.environ.get('DELTA_API_KEY', 'YOUR_API_KEY')
-DELTA_API_SECRET = os.environ.get('DELTA_API_SECRET', 'YOUR_API_SECRET')
+# Direct Hardcoded Live Credentials (No Environment Variable Confusion)
+DELTA_API_KEY = "TZw2k35xFfkFCJJcxTfWCSAllqSy7"
+DELTA_API_SECRET = "EFmEL09TTZJQJk9VaVV5woeN4knWpxexLEljmkQIKcpfmkGochXursGd1viH"
 DELTA_BASE_URL = "https://api.delta.exchange"
 
 active_trades = {}
 
 @app.route('/')
 def index():
-    return "Akash Live Set & Forget Quant Bot Active Hai!"
+    return "Akash Live Quant Bot Active Hai!"
 
 def get_main_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -98,7 +98,7 @@ def place_delta_live_order(direction, entry, sl, tp):
         
         payload = {
             "product_id": 27, # BTCUSD perpetual standard ID on Delta Live
-            "size": 1,        # Minimum safe contract size
+            "size": 1,        
             "side": "buy" if direction == "LONG" else "sell",
             "order_type": "market",
             "stop_loss_price": str(sl),
@@ -106,21 +106,24 @@ def place_delta_live_order(direction, entry, sl, tp):
         }
         
         payload_str = json.dumps(payload, separators=(',', ':'))
+        
         message_signature = timestamp + "POST" + path + payload_str
-        signature = hmac.new(DELTA_API_SECRET.encode('utf-8'), message_signature.encode('utf-8'), hashlib.sha256).hexdigest()
+        signature = hmac.new(
+            DELTA_API_SECRET.encode('utf-8'),
+            message_signature.encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
         
         headers = {
             'api-key': DELTA_API_KEY,
             'timestamp': timestamp,
             'signature': signature,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
         }
         
-        if DELTA_API_KEY != 'YOUR_API_KEY' and DELTA_API_SECRET != 'YOUR_API_SECRET':
-            response = requests.post(url, data=payload_str, headers=headers, timeout=10)
-            return response.status_code in [200, 201], response.json()
-        else:
-            return True, {"status": "Simulated Success (API Keys missing)"}
+        response = requests.post(url, data=payload_str, headers=headers, timeout=10)
+        return response.status_code in [200, 201], response.json()
     except Exception as e:
         return False, str(e)
 
