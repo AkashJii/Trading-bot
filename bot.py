@@ -15,10 +15,10 @@ TOKEN = '8665827387:AAEDbbZSPvJ_z6wGJHCN7CvuBYoGsi3Fv9A'
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-# Direct Hardcoded Live Credentials (No Environment Variable Confusion)
+# Direct Hardcoded Live Credentials & Delta India Base URL
 DELTA_API_KEY = "TZw2k35xFfkFCJJcxTfWCSAllqSy7"
 DELTA_API_SECRET = "EFmEL09TTZJQJk9VaVV5woeN4knWpxexLEljmkQIKcpfmkGochXursGd1viH"
-DELTA_BASE_URL = "https://api.india.delta.exchange"
+DELTA_BASE_URL = "https://api.india.delta.exchange"  #
 
 active_trades = {}
 
@@ -92,15 +92,15 @@ def analyze_market_and_setup():
 
 def place_delta_live_order(direction, entry, sl, tp):
     try:
-        path = "/v2/orders"
+        path = "/v2/orders"  #
         url = DELTA_BASE_URL + path
         timestamp = str(int(time.time()))
         
         payload = {
-            "product_id": 27, # BTCUSD perpetual standard ID on Delta Live
+            "product_id": 27, # BTCUSD perpetual standard ID
             "size": 1,        
             "side": "buy" if direction == "LONG" else "sell",
-            "order_type": "market",
+            "order_type": "market_order",  #
             "stop_loss_price": str(sl),
             "take_profit_price": str(tp)
         }
@@ -115,11 +115,12 @@ def place_delta_live_order(direction, entry, sl, tp):
         ).hexdigest()
         
         headers = {
-            'api-key': DELTA_API_KEY,
-            'timestamp': timestamp,
-            'signature': signature,
+            'api-key': DELTA_API_KEY,  #
+            'timestamp': timestamp,    #
+            'signature': signature,    #
             'Content-Type': 'application/json',
-            'Accept': 'application/json'
+            'Accept': 'application/json',
+            'User-Agent': 'AkashTradingBot/1.0'  #
         }
         
         response = requests.post(url, data=payload_str, headers=headers, timeout=10)
